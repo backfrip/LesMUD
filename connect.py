@@ -4,6 +4,33 @@ import socket
 import socketserver
 import threading
 
+class Connection(object):
+    def __init__(self):
+        
+
+class ConnectionManager(object):
+    def __init__(self):
+        self.counter = 0
+        self.connections = []
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        try:
+            self.counter++
+            return self.connections[self.counter]
+        except IndexError:
+            self.counter = 1
+            return self.connections
+
+class QueueStream(queue.Queue):
+    def readline_nowait(self):
+        try:
+            return self.get_nowait()
+        except queue.Empty:
+            return None
+
 class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
         input_queue, input_thread = make_queue_thread(self.rfile)
@@ -21,13 +48,6 @@ class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler):
         self.connection.close()
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer): pass
-
-class QueueStream(queue.Queue):
-    def readline_nowait(self):
-        try:
-            return self.get_nowait()
-        except queue.Empty:
-            return None
 
 def enqueue_thread(read_file, input_queue):
     with read_file:
