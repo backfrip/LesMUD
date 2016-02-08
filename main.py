@@ -7,7 +7,7 @@ import sys
 import connect
 
 class GameServer(object):
-    def __init__(self, host, port, debug=False):
+    def __init__(self, host, port, stdq, debug=False):
         connect.ThreadedTCPServer.allow_reuse_address = debug
         if debug:
             logging.debug("Server allow_reuse_address is active for debugging purposes!")
@@ -15,6 +15,13 @@ class GameServer(object):
             (host, port), connect.ThreadedTCPRequestHandler)
         self.server_thread = connect.make_target_thread(
             self.server.serve_forever)
+        self.stdq = stdq
+    
+    def run(self):
+        while self.server_thread.is_alive():
+            line = self.stdq.readline()
+            if line:
+                print(line.upper())
     
     def stop(self):
         logging.info("Game server shutting down...")
@@ -24,22 +31,20 @@ class GameServer(object):
 def main(debug=False):
     logging.basicConfig(level='DEBUG')
     
-    game_server = GameServer('0.0.0.0', 26101, debug=debug)
+    game_queue = connect.QueueStream()
+    game_server = GameServer('0.0.0.0', 26101, game_queue, debug=debug)
+    game_server_thread = connect.make_target_thread(target=game_server.run)
     
     stdin, input_thread = connect.make_queue_thread(sys.stdin)
     
     logging.info("Main process now accepting input.")
-    while True:
-        try:
+    try:
+        while game_server_thread.is_alive():
             line = stdin.readline()
             if line:
-                if line == "exit":
-                    break
-                else:
-                    logging.info("Unable to parse input.")
-        except KeyboardInterrupt:
-            print()
-            break
+                game_queue.put(line)
+    except KeyboardInterrupt:
+        print()
     logging.info("Shutting down game server...")
     game_server.stop()
 
