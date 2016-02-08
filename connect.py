@@ -4,28 +4,8 @@ import socket
 import socketserver
 import threading
 
-class Connection(object):
-    def __init__(self):
-        
-
-class ConnectionManager(object):
-    def __init__(self):
-        self.counter = 0
-        self.connections = []
-    
-    def __iter__(self):
-        return self
-    
-    def __next__(self):
-        try:
-            self.counter++
-            return self.connections[self.counter]
-        except IndexError:
-            self.counter = 1
-            return self.connections
-
 class QueueStream(queue.Queue):
-    def readline_nowait(self):
+    def readline(self):
         try:
             return self.get_nowait()
         except queue.Empty:
@@ -35,15 +15,15 @@ class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
         input_queue, input_thread = make_queue_thread(self.rfile)
         while input_thread.is_alive():
-            line = input_queue.readline_nowait()
+            line = input_queue.readline()
             if not line:
                 pass
             elif line == b'exit':
-                self.force_close()
+                self.close()
             else:
                 self.wfile.write(line.upper() + b'\n')
     
-    def force_close(self):
+    def close(self):
         self.connection.shutdown(socket.SHUT_RDWR)
         self.connection.close()
 
@@ -56,15 +36,10 @@ def enqueue_thread(read_file, input_queue):
 
 def make_queue_thread(read_file):
     q = QueueStream()
-    thread = threading.Thread(target=enqueue_thread, args=(read_file, q))
-    thread.daemon = True
-    thread.start()
+    thread = make_target_thread(enqueue_thread, (read_file, q))
     return (q, thread)
 
-def make_server_thread(host, port, debug=False):
-    ThreadedTCPServer.allow_reuse_address = debug
-    server = ThreadedTCPServer((host, port), ThreadedTCPRequestHandler)
-    server_thread = threading.Thread(target = server.serve_forever)
-    server_thread.daemon = True
-    server_thread.start()
-    return (server, server_thread)
+def make_target_thread(target, args=()):
+    thread = threading.Thread(target=target, args=args, daemon=True)
+    thread.start()
+    return thread
