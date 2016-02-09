@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import argparse
 import logging
 import sys
+from argparse import ArgumentParser
 
 import connect
 
@@ -12,44 +12,61 @@ class GameServer(object):
         if debug:
             logging.debug("Server allow_reuse_address is active for debugging purposes!")
         self.server = connect.ThreadedTCPServer(
-            (host, port), connect.ThreadedTCPRequestHandler)
+            self, (host, port), connect.ThreadedTCPRequestHandler)
         self.server_thread = connect.make_target_thread(
             self.server.serve_forever)
         self.stdq = stdq
+        self.connections = []
+    
+    def add_connection(self, read_queue, write_queue):
+        self.connections.append((read_queue, write_queue))
     
     def run(self):
         while self.server_thread.is_alive():
             line = self.stdq.readline()
             if line:
-                print(line.upper())
+                if line == 'exit' or line == 'stop':
+                    self.stop()
+                else:
+                    print(line.upper())
+            for connection in self.connections:
+                line = connection[0].readline()
+                if line:
+                    if line == 'stop':
+                        self.stop()
+                    else:
+                        print("Got:", line.upper())
+                        connection[1].put(line.upper())
     
     def stop(self):
-        logging.info("Game server shutting down...")
-        self.server.shutdown()
-        self.server.server_close()
+        if self.server_thread.is_alive():
+            logging.info("Shutting down game server...")
+            self.server.shutdown()
+            self.server.server_close()
 
 def main(debug=False):
-    logging.basicConfig(level='DEBUG')
+    logging.basicConfig(level=('DEBUG' if debug else 'INFO'))
     
     game_queue = connect.QueueStream()
     game_server = GameServer('0.0.0.0', 26101, game_queue, debug=debug)
-    game_server_thread = connect.make_target_thread(target=game_server.run)
+    game_server_thread = connect.make_target_thread(
+        target=game_server.run)
     
     stdin, input_thread = connect.make_queue_thread(sys.stdin)
     
     logging.info("Main process now accepting input.")
     try:
         while game_server_thread.is_alive():
-            line = stdin.readline()
-            if line:
-                game_queue.put(line)
+            stdin.bridge_line_to(game_queue)
     except KeyboardInterrupt:
         print()
-    logging.info("Shutting down game server...")
+    logging.info("Main process no longer accepting input.")
     game_server.stop()
+    logging.info("Shut down successfully.")
+    logging.info("Exiting...")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description="Start a game on the LesMUD engine.")
     parser.add_argument('-v', '--version', action='version',
         version='LesMUD Version 0.12')
