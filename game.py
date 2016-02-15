@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 
@@ -7,15 +6,6 @@ import main
 
 class GameAction(object): # distinguish between actions and events?
     pass
-
-class GameDecoder(json.JSONDecoder):
-    pass
-
-class GameEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, GameObject):
-            return # whatever a JSON serialization should look like...
-        return json.JSONEncoder.default(self, obj)
 
 class GameObject(object):
     def __init__(self):
@@ -30,8 +20,6 @@ class GameServer(object):
         self.actionable = []
         self.avatars = []
         self.connections = []
-        #self.world = json.load(
-        #   open(os.path.join(main.data_dir, 'data/world'), 'r'))
         
         connect.ThreadedTCPServer.allow_reuse_address = debug
         if debug:
